@@ -373,17 +373,26 @@ def wearable(
 @app.post('/wearable', response_class=HTMLResponse)
 def wearable_post(
     patient_id: str,
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    skip: Optional[str] = Form(None),
     repo: PatientRepository = Depends(get_repository),
 ) -> HTMLResponse:
     """Handle wearable data file upload POST request."""
     patient = repo.get(patient_id)
     context = {'patient_id': patient_id}
+
+    # check if user chooses to skip
+    if skip:
+        # setting empty werable data to indicate this step is complete
+        patient['patient']['wearable_data'] = []
+        repo.update(patient_id, patient)
+        return RedirectResponse(f'/consultation/{patient_id}', status_code=303)
+
     # TODO: use depends to inject the extractor
     extractor = WearableDataFileExtractor()
 
     # check if file exists before trying to use it
-    if file.size > 0:
+    if file and file.size > 0:
         # uses sdx to check if file is supported
         if extractor.is_supported(file.file):
             # there's a possibility of having a malformatted/corrupted file
@@ -405,8 +414,9 @@ def wearable_post(
             context['error'] = 'File is not supported.'
             return _render('wearable.html', **context)
 
-    # if no file was uploaded, just continue to the next step
-    return RedirectResponse(f'/consultation/{patient_id}', status_code=303)
+    # if no file was uploaded and no skip occurs, show error
+    context['error'] = 'Please either upload a file or skip this step.'
+    return _render('wearable.html', **context)
 
 
 @app.get('/diagnosis', response_class=HTMLResponse)
