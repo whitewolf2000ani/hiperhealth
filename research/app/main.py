@@ -19,6 +19,7 @@ derived from the patient data itself.
 
 from __future__ import annotations
 
+import io
 import uuid
 
 from datetime import datetime
@@ -41,6 +42,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sdx.agents.diagnostics import core as diag  # OpenAI helpers
+from sdx.agents.extraction.medical_reports import (
+    MedicalReportExtractorError,
+    MedicalReportFileExtractor,
+)
 from sdx.agents.extraction.wearable import (
     WearableDataExtractorError,
     WearableDataFileExtractor,
@@ -100,7 +105,7 @@ def _get_next_step(patient: Dict[str, Any]) -> str:
         return 'symptoms'
     if 'mental_health' not in patient_data:
         return 'mental'
-    if 'previous_tests' not in patient_data:
+    if 'fhir_reports' not in patient_data:
         return 'tests'
     if 'wearable_data' not in patient_data:
         return 'wearable'
@@ -341,16 +346,102 @@ def tests(
 
 
 @app.post('/tests')
-def tests_post(
-    patient_id: str,
-    previous_tests: str = Form(...),
+async def tests_post(
+    patient_id: str = Form(...),
+    has_reports: str = Form(...),
+    reports: List[UploadFile] = File(None),
+    action: str = Form('upload'),
     repo: PatientRepository = Depends(get_repository),
 ) -> RedirectResponse:
     """Handle tests POST request."""
     patient = repo.get(patient_id)
-    patient['patient']['previous_tests'] = previous_tests
-    repo.update(patient_id, patient)
-    return RedirectResponse(url=f'/consultation/{patient_id}', status_code=303)
+    if not patient:
+        raise HTTPException(404, 'Patient not found')
+
+    # Intialize fhir_reports if not existing
+    patient_data = patient.setdefault('patient', {})
+    patient_data.setdefault('fhir_reports', [])
+    seen_filenames = set(
+        r.get('filename', '').lower()
+        for r in patient_data['fhir_reports']
+        if isinstance(r, dict) and 'filename' in r
+    )
+
+    if has_reports == 'no':
+        # Skip step as complete
+        patient_data['fhir_reports'] = []
+        repo.update(patient_id, patient)
+        return RedirectResponse(f'/consultation/{patient_id}', status_code=303)
+
+    extractor = MedicalReportFileExtractor()
+    context = {
+        'patient_id': patient_id,
+        'patient_data': patient_data,
+        'lang': patient['meta'].get('lang', 'en'),
+    }
+
+    if action == 'upload' and reports:
+        if reports:
+            for report in reports:
+                if not report.filename:
+                    continue
+
+                name = report.filename.lower()
+                if name in seen_filenames:
+                    context = {
+                        'patient_id': patient_id,
+                        'patient_data': patient_data,
+                        'lang': patient['meta'].get('lang', 'en'),
+                        'error': (
+                            f'File named "{report.filename}" has already been'
+                            ' uploaded. Please select a different file.'
+                        ),
+                    }
+                    return _render('tests.html', **context)
+
+                # Validate file types
+                if (
+                    report.content_type not in extractor.allowed_mimetypes
+                    or not any(
+                        name.endswith(f'.{ext}')
+                        for ext in extractor.allowed_extensions
+                    )
+                ):
+                    context['error'] = (
+                        'Only PDF, PNG, JPG, JPEG files are allowed as '
+                        'Medical Reports.'
+                    )
+                    return _render('tests.html', **context)
+
+                try:
+                    data = await report.read()
+                    fhir = extractor.extract_report_data(io.BytesIO(data))
+                    # add filename to the extracted data
+                    if isinstance(fhir, dict):
+                        fhir['filename'] = report.filename
+                    patient_data['fhir_reports'].append(fhir)
+                    seen_filenames.add(name)
+                except MedicalReportExtractorError as e:
+                    context['error'] = (
+                        f'Error extracting report {report.filename}: {e}'
+                    )
+                    return _render('tests.html', **context)
+                except Exception as e:
+                    context['error'] = (
+                        f'Unexpected error processing file {report.filename}: '
+                        f'{e}'
+                    )
+                    return _render('tests.html', **context)
+
+        repo.update(patient_id, patient)
+        return _render('tests.html', **context)
+
+    # If user chooses to continue with the current uploads
+    if action == 'continue':
+        repo.update(patient_id, patient)
+        return RedirectResponse(f'/consultation/{patient_id}', status_code=303)
+
+    return _render('tests.html', **context)
 
 
 @app.get('/wearable', response_class=HTMLResponse)
