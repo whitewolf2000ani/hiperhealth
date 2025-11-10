@@ -57,9 +57,21 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: conda-incubator/setup-miniconda@v3
+        if: ${{ matrix.os != 'windows' }}
         with:
           miniforge-version: latest
           environment-file: conda/dev.yaml
+          channels: conda-forge,nodefaults
+          activate-environment: sdx
+          auto-update-conda: true
+          conda-solver: libmamba
+          python-version: "${{ matrix.python_version }}"
+
+      - uses: conda-incubator/setup-miniconda@v3
+        if: ${{ matrix.os == 'windows' }}
+        with:
+          miniforge-version: latest
+          environment-file: conda/dev-win.yaml
           channels: conda-forge,nodefaults
           activate-environment: sdx
           auto-update-conda: true
