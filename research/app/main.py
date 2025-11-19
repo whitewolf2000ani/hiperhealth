@@ -18,8 +18,7 @@ derived from the patient data itself.
 """
 
 import io
-import json
-import re
+import logging
 import sys
 import uuid
 
@@ -59,6 +58,8 @@ from research.app.reports import (
 )
 from research.models.repositories import ResearchRepository
 from research.models.ui import Patient
+
+logger = logging.getLogger(__name__)
 
 # Add the project's 'src' and 'research' directories to the Python path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -102,6 +103,19 @@ app.mount('/static', _STATIC, name='static')
 
 
 # --- Helper Functions ---
+def has_fhir_reports(consultation) -> bool:
+    """Return True if consultation has any FHIR reports."""
+    try:
+        if (
+            consultation.previous_tests is not None
+            and consultation.previous_tests != ''
+        ):
+            return True  # User made a decision (uploaded or skipped)
+        return False  # No decision made yet
+    except Exception:
+        return False
+
+
 def _render(template: str, **context: Any) -> HTMLResponse:
     tpl = TEMPLATES.get_template(template)
     return HTMLResponse(tpl.render(**context))
@@ -176,21 +190,18 @@ def patient_to_dict(patient: Patient) -> Dict[str, Any]:
     if consultation:
         if consultation.previous_tests:
             try:
-                raw = consultation.previous_tests
-                sanitized = re.sub(
-                    r':\s*\*+(?=\s*[,}\]])', ': "[REDACTED]"', raw
+                fhir_reports = load_fhir_reports(consultation)
+                patient_dict['patient']['fhir_reports'] = fhir_reports
+            except Exception:
+                logger.error(
+                    'Failed to load fhir_reports in patient_to_dict',
+                    exc_info=True,
                 )
-                fhir_reports = json.loads(sanitized)
-                if isinstance(fhir_reports, list):
-                    patient_dict['patient']['fhir_reports'] = fhir_reports
-                else:
-                    patient_dict['patient']['fhir_reports'] = []
-            except Exception as e:
-                print('JSON decoding error:', e)
                 patient_dict['patient']['fhir_reports'] = []
         else:
             patient_dict['patient']['fhir_reports'] = []
 
+        # Add other consultation fields
         consultation_fields = [
             'weight_kg',
             'height_cm',
@@ -225,10 +236,7 @@ def _get_next_step(patient: Patient) -> str:
         return 'symptoms'
     if consultation.mental_health is None:
         return 'mental'
-    if (
-        not consultation.previous_tests
-        or len(consultation.previous_tests) == 0
-    ):
+    if not has_fhir_reports(consultation):
         return 'tests'
     if consultation.wearable_data is None:
         return 'wearable'
@@ -481,6 +489,11 @@ async def tests_post(
     patient = repo.get_patient_by_uuid(patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail='Patient not found')
+
+    if not patient.consultations:
+        raise HTTPException(
+            status_code=400, detail='No consultation found for patient'
+        )
 
     consultation = patient.consultations[-1]
 
