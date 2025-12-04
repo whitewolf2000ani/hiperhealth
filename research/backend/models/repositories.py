@@ -4,8 +4,6 @@ from datetime import datetime
 from typing import Any, Dict, List
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from research.models.ui import (
     Consultation,
     ConsultationDiagnosis,
@@ -15,6 +13,7 @@ from research.models.ui import (
     Patient,
 )
 from research.schema.ui import ConsultationCreate, PatientCreate
+from sqlalchemy.orm import Session
 
 
 class ResearchRepository:

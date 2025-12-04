@@ -50,8 +50,6 @@ from hiperhealth.privacy.deidentifier import (
     deidentify_patient_record,
 )
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy.orm import Session
-
 from research.app.database import SessionLocal
 from research.app.reports import (
     load_fhir_reports,
@@ -60,6 +58,7 @@ from research.app.reports import (
 )
 from research.models.repositories import ResearchRepository
 from research.models.ui import Patient
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
