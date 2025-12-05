@@ -39,12 +39,12 @@ groups:
     tasks:
       cli:
         help: Run the Research CLI
-        dir: research/
+        dir: research/backend
         run: python cli.py
       app:
         help: Run the Research WEB App
-        dir: research/app
-        run: uvicorn main:app --reload
+        dir: research/backend
+        run: uvicorn app.main:app --reload
       seed:
         help: Run the script to migrate legacy patient data to the DB
         dir: scripts

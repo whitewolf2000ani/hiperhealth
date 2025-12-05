@@ -27,6 +27,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from app.database import SessionLocal
+from app.reports import (
+    load_fhir_reports,
+    process_uploaded_reports,
+    save_fhir_reports,
+)
 from fastapi import (
     Depends,
     FastAPI,
@@ -50,14 +56,8 @@ from hiperhealth.privacy.deidentifier import (
     deidentify_patient_record,
 )
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from research.app.database import SessionLocal
-from research.app.reports import (
-    load_fhir_reports,
-    process_uploaded_reports,
-    save_fhir_reports,
-)
-from research.models.repositories import ResearchRepository
-from research.models.ui import Patient
+from models.repositories import ResearchRepository
+from models.ui import Patient
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
