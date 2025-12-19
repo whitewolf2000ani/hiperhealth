@@ -94,6 +94,9 @@ class ReportSummary(BaseModel):
 
     file_name: str = Field(..., description='Name of the report file.')
     resource_type: str = Field(..., description='Type of the resource.')
+    fhir_content: Optional[Dict[str, Any]] = Field(
+        ..., description='The full extracted FHIR JSON content.'
+    )
 
 
 class MedicalReportListResponse(BaseModel):

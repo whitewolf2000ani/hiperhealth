@@ -128,7 +128,9 @@ groups:
     tasks:
       setup:
         help: Creates and migrates the database to the latest version
-        run: alembic upgrade head
+        run: |
+           mkdir -p research/backend/app/data
+           alembic upgrade head
       revision:
         help: Autogenerates a new database revision script
         args:
@@ -137,4 +139,5 @@ groups:
             type: string
             required: true
         run: |
+          mkdir -p research/backend/app/data
           alembic revision --autogenerate -m "{{ args.m }}"

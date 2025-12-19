@@ -121,7 +121,7 @@ def get_repository(
 
 # --- App Initialization ---
 _STATIC = StaticFiles(directory=APP_DIR / 'static')
-app = FastAPI(title='TeleHealthCareAI â€" Physician Portal API')
+app = FastAPI(title='TeleHealthCareAI Physician Portal API')
 app.mount('/static', _STATIC, name='static')
 
 
@@ -375,17 +375,21 @@ def get_consultation_status(
             completed_steps.append('symptoms')
         if c.mental_health:
             completed_steps.append('mental')
-        if c.previous_tests:
+        if c.previous_tests is not None:
             completed_steps.append('tests')
-        if c.wearable_data:
+        if c.wearable_data is not None:
             completed_steps.append('wearable')
+        if c.selected_diagnoses:
+            completed_steps.append('diagnosis')
+        if c.selected_exams:
+            completed_steps.append('exams')
 
     return ConsultationStatusResponse(
         patient_id=patient_id,
         current_step=next_step,
         completed_steps=completed_steps,
         is_complete=next_step == 'complete',
-        patient_data=record.get('patient', {}),
+        patient_dict=record,
         lang=record.get('meta', {}).get('lang', 'en'),
     )
 
@@ -446,7 +450,7 @@ def submit_lifestyle(
 
 # Symptoms
 @app.post(
-    'api/consultations/{patient_id}/symptoms', response_model=StepResponse
+    '/api/consultations/{patient_id}/symptoms', response_model=StepResponse
 )
 def submit_symptoms(
     patient_id: str,
@@ -469,7 +473,9 @@ def submit_symptoms(
 
 
 # Mental Health
-@app.post('api/consultations/{patient_id}/mental', response_model=StepResponse)
+@app.post(
+    '/api/consultations/{patient_id}/mental', response_model=StepResponse
+)
 def submit_mental_health(
     patient_id: str,
     data: MentalHealthRequest,
@@ -492,7 +498,7 @@ def submit_mental_health(
 
 # Upload Previous Medical Reports
 @app.post(
-    'api/consultations/{patient_id}/medical-reports',
+    '/api/consultations/{patient_id}/medical-reports',
     response_model=MedicalReportUploadResponse,
 )
 async def upload_medical_reports(
@@ -509,11 +515,11 @@ async def upload_medical_reports(
 
     # load existing reports
     fhir_reports = load_fhir_reports(consultation)
-    seen_filenames = (
+    seen_filenames = {
         r.get('filename', '').lower()
         for r in fhir_reports
         if isinstance(r, dict) and 'filename' in r
-    )
+    }
 
     # extract FHIR from uploaded reports
     extractor = MedicalReportFileExtractor()
@@ -587,6 +593,7 @@ def get_medical_reports(
             file_name=report.get('file_name')
             or report.get('filename', 'Unknown'),
             resource_type=report.get('resource_type', 'Unknown'),
+            fhir_content=report.get('fhir_content', 'Unknown'),
         )
         for report in formatted_reports
     ]
@@ -683,15 +690,17 @@ def get_diagnosis_suggestions(
     consultation.ai_diag_raw = ai.model_dump()
     repo.db.commit()
 
+    if isinstance(ai.options, list):
+        diagnosis_options = [
+            DiagnosisOption(name=opt, description='') for opt in ai.options
+        ]
+    else:
+        diagnosis_options = [
+            DiagnosisOption(name=name, description='')
+            for name in ai.options.keys()
+        ]
     return DiagnosisGetResponse(
-        patient_id=patient_id,
-        summary=ai.summary,
-        options=[
-            DiagnosisOption(
-                name=opt.get('name'), description=opt.get('description')
-            )
-            for opt in ai.options
-        ],
+        patient_id=patient_id, summary=ai.summary, options=diagnosis_options
     )
 
 
@@ -737,25 +746,22 @@ def get_exam_suggestions(
     lang = record['meta']['lang']
     selected_diagnoses = record.get('selected_diagnoses', [])
 
-    ai = diag.exams(
-        selected_diagnoses,
-        language=lang,
-        selected_diagnoses=record.get('selected_diagnoses', []),
-    )
+    ai = diag.exams(selected_diagnoses, language=lang, session_id=patient_id)
 
     consultation = patient.consultations[-1]
     consultation.ai_exam_raw = ai.model_dump()
     repo.db.commit()
 
+    if isinstance(ai.options, list):
+        exam_options = [
+            ExamOption(name=opt, description='') for opt in ai.options
+        ]
+    else:
+        exam_options = [
+            ExamOption(name=name, description='') for name in ai.options.keys()
+        ]
     return ExamGetResponse(
-        patient_id=patient_id,
-        summary=ai.summary,
-        options=[
-            ExamOption(
-                name=opt.get('name'), description=opt.get('description')
-            )
-            for opt in ai.options
-        ],
+        patient_id=patient_id, summary=ai.summary, options=exam_options
     )
 
 
@@ -766,7 +772,7 @@ def get_exam_suggestions(
 def submit_exams_selection(
     patient_id: str,
     req: ExamSubmitRequest,
-    deidentifier: Deidentifier = Depends(get_repository),
+    deidentifier: Deidentifier = Depends(get_deidentifier),
     repo: ResearchRepository = Depends(get_repository),
 ):
     """Save selected exams and finalize record with deidentification."""
@@ -776,7 +782,7 @@ def submit_exams_selection(
 
     record = patient_to_dict(patient)
     record['selected_exams'] = req.selected_exams
-    record['evaluations']['ai_exams'] = req.evaluations
+    record['evaluations']['ai_exam'] = req.evaluations
     record['meta']['timestamp'] = datetime.utcnow().isoformat()
 
     deidentified_record = deidentify_patient_record(record, deidentifier)
