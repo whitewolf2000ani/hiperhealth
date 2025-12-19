@@ -139,5 +139,4 @@ groups:
             type: string
             required: true
         run: |
-          mkdir -p research/backend/app/data
           alembic revision --autogenerate -m "{{ args.m }}"
