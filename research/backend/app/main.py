@@ -498,7 +498,7 @@ def submit_mental_health(
 
 # Upload Previous Medical Reports
 @app.post(
-    '/api/consultations/{patient_id}/medical-reports',
+    '/api/consultations/{patient_id}/medical-reports/upload',
     response_model=MedicalReportUploadResponse,
 )
 async def upload_medical_reports(
@@ -550,7 +550,7 @@ async def upload_medical_reports(
 
 # Skip Uploading Medical Report Step
 @app.post(
-    '/api/consultations/{patient_id}/medical_reports/skip',
+    '/api/consultations/{patient_id}/medical-reports/skip',
     response_model=MedicalReportSkipResponse,
 )
 def skip_medical_reports(
@@ -565,7 +565,7 @@ def skip_medical_reports(
     consultation = patient.consultations[-1]
     save_fhir_reports(consultation, [], repo)
 
-    next_step = _get_next_step
+    next_step = _get_next_step(patient)
     return MedicalReportSkipResponse(
         success=True, skipped=True, next_step=next_step
     )
@@ -573,7 +573,7 @@ def skip_medical_reports(
 
 # Get all the previous medical Reports
 @app.get(
-    '/api/consultations/{patient_id}/medical_reports',
+    '/api/consultations/{patient_id}/medical-reports',
     response_model=MedicalReportListResponse,
 )
 def get_medical_reports(
