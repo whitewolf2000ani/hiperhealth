@@ -17,6 +17,7 @@ repository pattern, preventing data loss on server restart. State is
 derived from the patient data itself.
 """
 
+# ruff: noqa: E402
 import io
 import logging
 import uuid
@@ -25,6 +26,12 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List
+
+from dotenv import load_dotenv
+
+# Load environment variables
+env_path = Path(__file__).resolve().parents[3] / '.envs' / '.env'
+load_dotenv(env_path)
 
 from app.database import SessionLocal
 from app.models.repositories import ResearchRepository
@@ -61,7 +68,6 @@ from app.schemas import (
     WearableDataSkipResponse,
     WearableDataUploadResponse,
 )
-from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -75,10 +81,6 @@ from hiperhealth.privacy.deidentifier import (
     deidentify_patient_record,
 )
 from sqlalchemy.orm import Session
-
-# Load environment variables
-env_path = Path(__file__).resolve().parents[3] / '.envs' / '.env'
-load_dotenv(env_path)
 
 logger = logging.getLogger(__name__)
 
