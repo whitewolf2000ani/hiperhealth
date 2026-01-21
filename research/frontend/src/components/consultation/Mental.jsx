@@ -1,16 +1,3 @@
-/**
- * Mental.jsx
- *
- * Step 4 of consultation workflow.
- * Collects ONLY mental health information: stress, anxiety, mood, coping mechanisms.
- *
- * Endpoints:
- *   - POST /api/consultations/{id}/mental (save mental health)
- *
- * Flow:
- *   Symptoms → Mental (CURRENT) → Medical Reports → Wearable → ...
- */
-
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {
@@ -30,10 +17,6 @@ import { useConsultation, consultationActions } from '../../context/Consultation
 import consultationAPI from '../../services/api';
 
 export default function Mental() {
-  // =========================================================================
-  // HOOKS
-  // =========================================================================
-
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { state, dispatch } = useConsultation();

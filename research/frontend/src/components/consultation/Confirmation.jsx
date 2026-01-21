@@ -12,9 +12,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useConsultation, consultationActions } from '../../context/ConsultationContext';
-import consultationAPI from '../../services/api';
 
-export default function Completion() {
+
+export default function Confirmation() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { state, dispatch } = useConsultation();

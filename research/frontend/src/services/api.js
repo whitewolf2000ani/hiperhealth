@@ -228,7 +228,7 @@ export const consultationAPI={
 
     /**
      * Skip medical reports
-     * POST /api/consultations/{patient_id}/medical_reports/skip
+     * POST /api/consultations/{patient_id}/medical-reports/skip
      */
     async skipMedicalReports(patientId){
         const response= await fetch(
@@ -305,6 +305,8 @@ export const consultationAPI={
         if(!response.ok){
             throw new Error(`Skip wearable data failed: ${response.status}`);
         }
+
+        return response.json();
     },
 
     //Step 7: AI Diagnosis

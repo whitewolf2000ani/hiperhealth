@@ -19,7 +19,6 @@ derived from the patient data itself.
 
 import io
 import logging
-import sys
 import uuid
 
 from datetime import datetime
@@ -28,13 +27,13 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from app.database import SessionLocal
+from app.models.repositories import ResearchRepository
+from app.models.ui import Patient
 from app.reports import (
     load_fhir_reports,
     process_uploaded_reports,
     save_fhir_reports,
 )
-
-# Import all schemas
 from app.schemas import (
     ConsultationStatusResponse,
     CreatePatientRequest,
@@ -62,17 +61,10 @@ from app.schemas import (
     WearableDataSkipResponse,
     WearableDataUploadResponse,
 )
-from fastapi import (
-    Depends,
-    FastAPI,
-    File,
-    HTTPException,
-    UploadFile,
-)
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-
-# Now import the project-specific modules
 from hiperhealth.agents.diagnostics import core as diag
 from hiperhealth.agents.extraction.medical_reports import (
     MedicalReportFileExtractor,
@@ -82,16 +74,13 @@ from hiperhealth.privacy.deidentifier import (
     Deidentifier,
     deidentify_patient_record,
 )
-from models.repositories import ResearchRepository
-from models.ui import Patient
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+# Load environment variables
+env_path = Path(__file__).resolve().parents[3] / '.envs' / '.env'
+load_dotenv(env_path)
 
-# Add the project's 'src' and 'research' directories to the Python path
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-sys.path.append(str(PROJECT_ROOT / 'src'))
-sys.path.append(str(PROJECT_ROOT))
+logger = logging.getLogger(__name__)
 
 APP_DIR = Path(__file__).parent
 
@@ -271,14 +260,14 @@ def _get_next_step(patient: Patient) -> str:
     if consultation.mental_health is None:
         return 'mental'
     if consultation.previous_tests is None:
-        return 'tests'
+        return 'medical-reports'
     if consultation.wearable_data is None:
-        return 'wearable'
+        return 'wearable-data'
     if not consultation.selected_diagnoses:
         return 'diagnosis'
     if not consultation.selected_exams:
         return 'exams'
-    return 'complete'
+    return 'confirmation'
 
 
 # --- FastAPI Endpoints ---
@@ -329,7 +318,7 @@ def get_all_patients(repo: ResearchRepository = Depends(get_repository)):
                 if p.consultations and p.consultations[-1].timestamp
                 else None,
                 current_step=next_step,
-                is_complete=next_step == 'complete',
+                is_complete=next_step == 'confirmation',
             )
         )
     return patients_data
@@ -376,9 +365,9 @@ def get_consultation_status(
         if c.mental_health:
             completed_steps.append('mental')
         if c.previous_tests is not None:
-            completed_steps.append('tests')
+            completed_steps.append('medical-reports')
         if c.wearable_data is not None:
-            completed_steps.append('wearable')
+            completed_steps.append('wearable-data')
         if c.selected_diagnoses:
             completed_steps.append('diagnosis')
         if c.selected_exams:
@@ -388,7 +377,7 @@ def get_consultation_status(
         patient_id=patient_id,
         current_step=next_step,
         completed_steps=completed_steps,
-        is_complete=next_step == 'complete',
+        is_complete=next_step == 'confirmation',
         patient_dict=record,
         lang=record.get('meta', {}).get('lang', 'en'),
     )

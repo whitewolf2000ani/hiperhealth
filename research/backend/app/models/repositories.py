@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List
 from uuid import UUID
 
-from models.ui import (
+from app.models.ui import (
     Consultation,
     ConsultationDiagnosis,
     ConsultationExam,

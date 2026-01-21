@@ -129,7 +129,7 @@ groups:
       setup:
         help: Creates and migrates the database to the latest version
         run: |
-           mkdir -p research/backend/app/data
+           mkdir -p research/backend/data
            alembic upgrade head
       revision:
         help: Autogenerates a new database revision script

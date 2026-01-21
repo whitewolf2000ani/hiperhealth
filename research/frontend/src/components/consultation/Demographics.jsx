@@ -29,16 +29,16 @@ export default function Demographics() {
     defaultValues: {
       age: state.formData.demographics.age || '',
       gender: state.formData.demographics.gender || '',
-      weight: state.formData.demographics.weight || '',
-      height: state.formData.demographics.height || '',
+      weight_kg: state.formData.demographics.weight_kg || '',
+      height_cm: state.formData.demographics.height_cm || '',
     },
   });
 
   const [apiError, setApiError] = useState(null);
   const watchAge = watch('age');
   const watchGender = watch('gender');
-  const watchWeight = watch('weight');
-  const watchHeight = watch('height');
+  const watchWeight = watch('weight_kg');
+  const watchHeight = watch('height_cm');
 
   const calculateBMI = () => {
     if (watchHeight && watchWeight) {
@@ -73,8 +73,8 @@ export default function Demographics() {
         consultationActions.updateDemographics({
           age: parseInt(data.age),
           gender: data.gender,
-          weight: parseFloat(data.weight),
-          height: parseFloat(data.height),
+          weight_kg: parseFloat(data.weight_kg),
+          height_cm: parseFloat(data.height_cm),
         })
       );
 
@@ -84,8 +84,8 @@ export default function Demographics() {
         {
           age: parseInt(data.age),
           gender: data.gender,
-          weight_kg: parseFloat(data.weight),
-          height_cm: parseFloat(data.height),
+          weight_kg: parseFloat(data.weight_kg),
+          height_cm: parseFloat(data.height_cm),
         }
       );
 
@@ -229,8 +229,8 @@ export default function Demographics() {
                         type="number"
                         step="0.1"
                         placeholder="e.g., 70"
-                        className={`py-3 ${errors.weight ? 'is-invalid' : ''}`}
-                        {...register('weight', {
+                        className={`py-3 ${errors.weight_kg ? 'is-invalid' : ''}`}
+                        {...register('weight_kg', {
                           required: 'Weight is required',
                           min: {
                             value: 1,
@@ -250,12 +250,12 @@ export default function Demographics() {
                         kg
                       </span>
                     </div>
-                    {errors.weight && (
+                    {errors.weight_kg && (
                       <Form.Control.Feedback type="invalid" className="d-block mt-2">
-                        {errors.weight.message}
+                        {errors.weight_kg.message}
                       </Form.Control.Feedback>
                     )}
-                    {watchWeight && !errors.weight && (
+                    {watchWeight && !errors.weight_kg && (
                       <small className="text-success d-block mt-2">
                         ✓ {watchWeight} kg
                       </small>
@@ -273,8 +273,8 @@ export default function Demographics() {
                         type="number"
                         step="0.1"
                         placeholder="e.g., 175"
-                        className={`py-3 ${errors.height ? 'is-invalid' : ''}`}
-                        {...register('height', {
+                        className={`py-3 ${errors.height_cm ? 'is-invalid' : ''}`}
+                        {...register('height_cm', {
                           required: 'Height is required',
                           min: {
                             value: 1,
@@ -294,12 +294,12 @@ export default function Demographics() {
                         cm
                       </span>
                     </div>
-                    {errors.height && (
+                    {errors.height_cm && (
                       <Form.Control.Feedback type="invalid" className="d-block mt-2">
-                        {errors.height.message}
+                        {errors.height_cm.message}
                       </Form.Control.Feedback>
                     )}
-                    {watchHeight && !errors.height && (
+                    {watchHeight && !errors.height_cm && (
                       <small className="text-success d-block mt-2">
                         ✓ {watchHeight} cm
                       </small>

@@ -1,19 +1,4 @@
-/**
- * Wearable.jsx
- *
- * Step 6 of consultation workflow.
- * Collects wearable device data: file upload OR skip option.
- * Supports exports from fitness trackers, smartwatches, health apps.
- *
- * Endpoints:
- *   - POST /api/consultations/{id}/wearable-data (upload file)
- *   - POST /api/consultations/{id}/wearable-data/skip (skip upload)
- *
- * Flow:
- *   Medical Reports → Wearable Data (CURRENT) → Diagnosis → Exams → ...
- */
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Form,
@@ -33,10 +18,6 @@ import { useConsultation, consultationActions } from '../../context/Consultation
 import consultationAPI from '../../services/api';
 
 export default function Wearable() {
-  // =========================================================================
-  // HOOKS
-  // =========================================================================
-
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { state, dispatch } = useConsultation();
@@ -46,18 +27,19 @@ export default function Wearable() {
     formState: { isSubmitting },
   } = useForm();
 
-  // =========================================================================
-  // STATE
-  // =========================================================================
-
+  useEffect(()=>{
+    if(!state.formData.wearableData){
+      dispatch(consultationActions.updateWearableData({
+        file:null,
+        skipped:false,
+      }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const [apiError, setApiError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(
-    state.formData.wearableData.file || null
+    state.formData.wearableData?.file || null
   );
-
-  // =========================================================================
-  // CONSTANTS
-  // =========================================================================
 
   const acceptedFormats = [
     'text/csv',

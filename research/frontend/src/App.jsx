@@ -12,8 +12,9 @@ import MedicalReport from "./components/consultation/MedicalReport";
 import Wearable from "./components/consultation/Wearable";
 import Diagnosis from "./components/consultation/Diagnosis";
 import Exam from "./components/consultation/Exam";
-import Completion from "./components/consultation/Completion";
+import Completion from "./components/consultation/Confirmation";
 import { ConsultationProvider } from "./context/ConsultationContext";
+import Confirmation from "./components/consultation/Confirmation";
 
 
 export default function App() {
@@ -32,7 +33,7 @@ export default function App() {
           <Route path="/wearable-data" element={<Wearable />} />
           <Route path="/diagnosis" element={<Diagnosis />} />
           <Route path="/exams" element={<Exam />} />
-          <Route path="/confirmation" element={<Completion />} />
+          <Route path="/confirmation" element={<Confirmation />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </Router>

@@ -1,18 +1,4 @@
-/**
- * MedicalReport.jsx
- *
- * Step 5 of consultation workflow.
- * Collects medical reports: file upload OR skip option.
- *
- * Endpoints:
- *   - POST /api/consultations/{id}/medical-reports (upload files)
- *   - POST /api/consultations/{id}/medical-reports/skip (skip upload)
- *
- * Flow:
- *   Mental → Medical Reports (CURRENT) → Wearable Data → Diagnosis → ...
- */
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect} from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Form,
@@ -32,10 +18,6 @@ import { useConsultation, consultationActions } from '../../context/Consultation
 import consultationAPI from '../../services/api';
 
 export default function MedicalReport() {
-  // =========================================================================
-  // HOOKS
-  // =========================================================================
-
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { state, dispatch } = useConsultation();
@@ -44,20 +26,19 @@ export default function MedicalReport() {
     handleSubmit,
     formState: { isSubmitting },
   } = useForm();
-
-  // =========================================================================
-  // STATE
-  // =========================================================================
-
+  useEffect(()=>{
+    if(!state.formData.medicalReports){
+      dispatch(consultationActions.updateMedicalReports({
+        files:[],
+        skipped:false,
+      }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
   const [apiError, setApiError] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState(
-    state.formData.medicalReports.files || []
+    state.formData.medicalReports?.files || []
   );
-
-  // =========================================================================
-  // CONSTANTS
-  // =========================================================================
-
   const acceptedFormats = [
     'application/pdf',
     'image/jpeg',
@@ -377,7 +358,6 @@ export default function MedicalReport() {
                       <ul className="text-muted small mb-0 ps-3">
                         <li>PDF Documents</li>
                         <li>Images (JPG, PNG)</li>
-                        <li>Word Documents</li>
                       </ul>
                     </Col>
                     <Col md={6}>
@@ -386,7 +366,7 @@ export default function MedicalReport() {
                       </p>
                       <ul className="text-muted small mb-0 ps-3">
                         <li>Maximum 5 files</li>
-                        <li>Max 10MB per file</li>
+                        <li>Max 20MB per file</li>
                         <li>Clear, readable scans</li>
                       </ul>
                     </Col>

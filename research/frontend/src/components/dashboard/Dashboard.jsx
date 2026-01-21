@@ -93,11 +93,64 @@ export default function Dashboard() {
 
   const handleAddPatient = () => {
     // Navigate to language selection to create new patient
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('consultationState_')) {
+        localStorage.removeItem(key);
+      }
+    });
+    dispatch(consultationActions.resetState());
     navigate('/language');
   };
 
   const handleViewPatient = (patientId) => {
     navigate(`/patients/${patientId}`);
+  };
+
+  const handleResumePatient = async (patientId) => {
+    try{
+      const consultationData=await consultationAPI.getConsultationStatus(patientId);
+      if(!consultationData){
+        alert('No consultation data found for this patient.');
+        return;
+      }
+      const currentStep=consultationData.current_step || 'demographics';
+      const language=consultationData.lang || 'en';
+      dispatch(consultationActions.initConsultation(
+        patientId,
+        language,
+        currentStep
+      ));
+
+      const shouldPrefillFromLocalStorage=[
+        'demographics',
+        'lifestyle',
+        'symptoms',
+        'mental',
+      ].includes(currentStep);
+
+      if(shouldPrefillFromLocalStorage){
+        const savedState=localStorage.getItem(`consultationState_${patientId}`);
+        if(savedState){
+          const parsedState=JSON.parse(savedState);
+          if(parsedState.formData.demographics){
+            dispatch(consultationActions.updateDemographics(parsedState.formData.demographics));
+          }
+          if(parsedState.formData.lifestyle){
+            dispatch(consultationActions.updateLifestyle(parsedState.formData.lifestyle));
+          }
+          if(parsedState.formData.symptoms){
+            dispatch(consultationActions.updateSymptoms(parsedState.formData.symptoms));
+          }
+          if(parsedState.formData.mental){
+            dispatch(consultationActions.updateMentalHealth(parsedState.formData.mental));
+          }
+        }
+      }
+        navigate(`/${currentStep}`);
+    }catch(err){
+      console.error('Error resuming patient consultation:',err);
+      alert(`Failed to resume consultation: ${err.message}`);
+    }
   };
 
   const handleDeletePatient = async (patientId, patientName) => {
@@ -314,16 +367,30 @@ export default function Dashboard() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            {patient.is_complete === true ? (
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() =>
+                                  handleViewPatient(patient.patient_id)
+                                }
+                              >
+                                View
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() =>
+                                  handleResumePatient(patient.patient_id)
+                                }
+                              >
+                                Resume
+                              </Button>
+                            )}
                             <Button
-                              size="sm"
-                              variant="outline-primary"
-                              onClick={() => handleViewPatient(patient.patient_id)}
-                            >
-                              View
-                            </Button>
-                            <Button
-                              size="sm"
                               variant="outline-danger"
+                              size="sm"
                               onClick={() =>
                                 handleDeletePatient(
                                   patient.patient_id,

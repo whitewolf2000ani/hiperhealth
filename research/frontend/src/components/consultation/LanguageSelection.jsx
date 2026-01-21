@@ -12,9 +12,9 @@ export default function LanguageSelection(){
   const [isLoading,setIsLoading]= useState(false);
   const [error, setError]=useState(null);
   const languages=[
-    { code: 'en', name: '🇬🇧 English', flag: '🇬🇧' },
-    { code: 'es', name: '🇪🇸 Spanish', flag: '🇪🇸' },
-    { code: 'pt', name: '🇧🇷 Portuguese', flag: '🇧🇷' }
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'es', name: 'Spanish', flag: '🇪🇸' },
+    { code: 'pt', name: 'Portuguese', flag: '🇧🇷' }
   ]
 
   const handleLanguageSelect= async (languageCode)=>{

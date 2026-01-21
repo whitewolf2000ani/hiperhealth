@@ -1,16 +1,3 @@
-/**
- * Symptoms.jsx
- *
- * Step 3 of consultation workflow.
- * Collects ONLY symptom information: description of current symptoms.
- *
- * Endpoints:
- *   - POST /api/consultations/{id}/symptoms (save symptoms)
- *
- * Flow:
- *   Lifestyle → Symptoms (CURRENT) → Mental → Medical Reports → ...
- */
-
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import {

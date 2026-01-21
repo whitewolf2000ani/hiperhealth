@@ -1,39 +1,4 @@
-/**
- * Diagnosis.jsx
- *
- * Step 7 of consultation workflow.
- * Displays AI-generated diagnosis suggestions and allows user to select/evaluate them.
- *
- * Endpoints:
- *   - GET /api/consultations/{id}/diagnosis (fetch AI suggestions)
- *   - POST /api/consultations/{id}/diagnosis (save selected diagnosis with ratings)
- *
- * Flow:
- *   Wearable → Diagnosis (CURRENT) → Exams → Completion → Dashboard
- *
- * API Response Format:
- *   {
- *     patient_id: string
- *     summary: string
- *     options: [{ name: string, description: string }, ...]
- *   }
- *
- * API Request Format:
- *   {
- *     selected_diagnoses: [name, ...],
- *     evaluations: {
- *       name: {
- *         accuracy: int (1-10),
- *         relevance: int (1-10),
- *         usefulness: int (1-10),
- *         coherence: int (1-10),
- *         comments: Optional[string]
- *       }
- *     }
- *   }
- */
-
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect} from 'react';
 import { useForm } from 'react-hook-form';
 import {
   Form,
@@ -45,147 +10,202 @@ import {
   Spinner,
   ListGroup,
   Badge,
+  Collapse,
+  InputGroup,
 } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { useConsultation, consultationActions } from '../../context/ConsultationContext';
 import consultationAPI from '../../services/api';
 
-export default function Diagnosis() {
-  // =========================================================================
-  // HOOKS
-  // =========================================================================
 
+export default function Diagnosis() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
   const { state, dispatch } = useConsultation();
+
   const {
     handleSubmit,
     formState: { isSubmitting },
   } = useForm();
 
-  // =========================================================================
-  // STATE
-  // =========================================================================
-
   const [apiError, setApiError] = useState(null);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(true);
   const [aiSummary, setAiSummary] = useState('');
-  const [suggestions, setSuggestions] = useState(
-    state.formData.diagnosis.suggestions || []
-  );
-  const [selectedDiagnoses, setSelectedDiagnoses] = useState(
-    state.formData.diagnosis.selected || []
-  );
-  const [evaluations, setEvaluations] = useState(
-    state.formData.diagnosis.evaluations || {}
-  );
 
-  // =========================================================================
-  // EFFECTS
-  // =========================================================================
+  // local state for components UI
+  const [diagnosisItems, setDiagnosisItems] = useState([]);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [evaluations, setEvaluations] = useState({});
+  const [manualText, setManualText] = useState('');
 
   useEffect(() => {
-    fetchDiagnosisSuggestions();
-  }, []);
+    const hasExistingData=
+      state.formData.diagnosis.suggestions.length>0 ||
+      state.formData.diagnosis.selected.length>0 ||
+      Object.keys(state.formData.diagnosis.evaluations).length>0;
 
-  // =========================================================================
-  // API CALLS
-  // =========================================================================
+      if(hasExistingData){
+        restoreFromContext();
+      }else{
+        fetchDiagnosisSuggestions();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+
+  const restoreFromContext=()=>{
+    try{
+      setIsLoadingSuggestions(true);
+      const aiItems=state.formData.diagnosis.suggestions.map((opt,idx)=>({
+        id: opt.id || `ai-${idx}`,
+        name: opt.name,
+        description: opt.description,
+        source: opt.source || 'ai',
+        expanded: false,
+      }));
+
+      setDiagnosisItems(aiItems);
+      setSelectedIds(state.formData.diagnosis.selected);
+      setEvaluations(state.formData.diagnosis.evaluations);
+      setIsLoadingSuggestions(false);
+    }catch(err){
+       console.error('Error restoring diagnosis from context:', err);
+       fetchDiagnosisSuggestions();
+    }
+  };
 
   const fetchDiagnosisSuggestions = async () => {
     try {
       setIsLoadingSuggestions(true);
       setApiError(null);
-
       if (!state.patientId) {
         throw new Error('Patient ID not found. Please start over.');
       }
-
-      // Call backend API to get AI diagnosis suggestions
-      // Expected response: { patient_id, summary, options: [{ name, description }, ...] }
-      const response = await consultationAPI.getDiagnosisSuggestions(
-        state.patientId
-      );
-
-      const diagnosisOptions = response.options || [];
-      setSuggestions(diagnosisOptions);
+      const response = await consultationAPI.getDiagnosisSuggestions(state.patientId);
+      const options = response.options || [];
       setAiSummary(response.summary || '');
-      dispatch(consultationActions.updateDiagnosisSuggestions(diagnosisOptions));
+
+      const aiItems = options.map((opt, idx) => ({
+        id: opt.id || `ai-${idx}`,
+        name: opt.name,
+        description: opt.description,
+        source: 'ai',
+        expanded: false,
+      }));
+
+      setDiagnosisItems(aiItems);
+
+      // Persist suggestions to context
+      dispatch(
+        consultationActions.updateDiagnosisSuggestions(
+          aiItems.map((item)=>({
+            id: item.id,
+            name:item.name,
+            description:item.description,
+            source: item.source
+          }))
+        )
+      );
     } catch (err) {
       console.error('Error fetching diagnosis suggestions:', err);
-      setApiError(
-        err.message || 'Failed to load diagnosis suggestions. Please try again.'
-      );
+      setApiError(err.message || 'Failed to load diagnosis suggestions. Please try again.');
     } finally {
       setIsLoadingSuggestions(false);
     }
   };
 
-  // =========================================================================
-  // HELPER FUNCTIONS
-  // =========================================================================
 
-  const isSelected = (diagnosisName) => selectedDiagnoses.includes(diagnosisName);
-
-  const toggleDiagnosis = (diagnosisName) => {
-    setSelectedDiagnoses((prev) =>
-      prev.includes(diagnosisName)
-        ? prev.filter((name) => name !== diagnosisName)
-        : [...prev, diagnosisName]
+  const toggleSelected = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
-  const setEvaluation = (diagnosisName, field, value) => {
+  const toggleExpanded = (id) => {
+    setDiagnosisItems((prev) =>
+      prev.map((item) =>
+        item.id === id ? { ...item, expanded: !item.expanded } : item
+      )
+    );
+  };
+
+  const setRating = (id, field, value) => {
     setEvaluations((prev) => ({
       ...prev,
-      [diagnosisName]: {
-        ...(prev[diagnosisName] || {}),
-        [field]: parseInt(value),
+      [id]: {
+        ...(prev[id] || {}),
+        [field]: Number(value),
       },
     }));
   };
 
-  const setComment = (diagnosisName, comment) => {
+  const setComment = (id, comment) => {
     setEvaluations((prev) => ({
       ...prev,
-      [diagnosisName]: {
-        ...(prev[diagnosisName] || {}),
+      [id]: {
+        ...(prev[id] || {}),
         comments: comment,
       },
     }));
   };
 
-  const getEvaluationScore = (diagnosisName) => {
-    const evaluations = evaluations[diagnosisName];
-    if (!evaluations) return 0;
-    const ratings = [
-      evaluations.accuracy,
-      evaluations.relevance,
-      evaluations.usefulness,
-      evaluations.coherence,
+  // Requires 4 fields (accuracy, relevance, usefulness, coherence) 1-10
+  const isEvaluationComplete = (id) => {
+    const ev = evaluations[id];
+    if (!ev) return false;
+    const fields = [
+      ev.accuracy,
+      ev.relevance,
+      ev.usefulness,
+      ev.coherence,
     ];
-    const validRatings = ratings.filter((r) => r !== undefined);
-    if (validRatings.length === 0) return 0;
-    return Math.round(
-      validRatings.reduce((a, b) => a + b, 0) / validRatings.length
+    return fields.every((v) => typeof v === 'number' && v >= 1 && v <= 10);
+  };
+
+  const getAverageScore = (id) => {
+    const ev = evaluations[id];
+    if (!ev) return 0;
+    const vals = [
+      ev.accuracy,
+      ev.relevance,
+      ev.usefulness,
+      ev.coherence,
+    ].filter((v) => typeof v === 'number');
+
+    if (!vals.length) return 0;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  };
+
+
+  const handleAddManualDiagnosis = () => {
+    const trimmed = manualText.trim();
+    if (!trimmed) return;
+
+    const newId = `manual-${Date.now()}`;
+    const newItem = {
+      id: newId,
+      name: trimmed,
+      description: '',
+      source: 'manual',
+      expanded: true, // auto-expand
+    };
+
+    setDiagnosisItems((prev) => [...prev, newItem]);
+    setSelectedIds((prev) => [...prev, newId]);
+    setManualText('');
+
+    dispatch(
+      consultationActions.updateDiagnosisSuggestions([
+        ...state.formData.diagnosis.suggestions,
+        {
+          id:newId,
+          name: trimmed,
+          description: '',
+          source: 'manual',
+        }
+      ])
     );
   };
 
-  const isEvaluationComplete = (diagnosisName) => {
-    const evaluations = evaluations[diagnosisName];
-    return (
-      evaluations &&
-      evaluations.accuracy !== undefined &&
-      evaluations.relevance !== undefined &&
-      evaluations.usefulness !== undefined &&
-      evaluations.coherence !== undefined
-    );
-  };
-
-  // =========================================================================
-  // FORM SUBMISSION
-  // =========================================================================
 
   const onSubmit = async () => {
     try {
@@ -195,476 +215,378 @@ export default function Diagnosis() {
         throw new Error('Patient ID not found. Please start over.');
       }
 
-      if (selectedDiagnoses.length === 0) {
-        setApiError('Please select at least one diagnosis');
+      if (selectedIds.length === 0) {
+        setApiError('Please select at least one diagnosis.');
         return;
       }
 
-      // Validate all selected diagnoses have complete evaluations
-      const incompleteEvals = selectedDiagnoses.filter(
-        (name) => !isEvaluationComplete(name)
-      );
-      if (incompleteEvals.length > 0) {
-        setApiError(
-          `Please complete ratings for: ${incompleteEvals.join(', ')}`
-        );
+      const incomplete = selectedIds.filter((id) => !isEvaluationComplete(id));
+      if (incomplete.length > 0) {
+        const names = diagnosisItems
+          .filter((item) => incomplete.includes(item.id))
+          .map((item) => item.name);
+        setApiError(`Please complete ratings for: ${names.join(', ')}`);
         return;
       }
 
-      // Update local state
+      const selectedNames = diagnosisItems
+        .filter((item) => selectedIds.includes(item.id))
+        .map((item) => item.name);
+
+      const evaluationsByName = {};
+      diagnosisItems
+        .filter((item) => selectedIds.includes(item.id))
+        .forEach((item) => {
+          evaluationsByName[item.name] = evaluations[item.id];
+        });
+
+      // Persist to context
       dispatch(
-        consultationActions.updateSelectedDiagnosis(
-          selectedDiagnoses,
-          evaluations
-        )
+        consultationActions.updateSelectedDiagnosis(selectedIds, evaluations)
       );
 
-      // Call backend API to save selections with ratings
-      // Expected request: { selected_diagnoses: [names], evaluations: { name: DiagnosisRating, ... } }
-      const response = await consultationAPI.saveDiagnosisSelections(
-        state.patientId,
-        {
-          selected_diagnoses: selectedDiagnoses,
-          evaluations: evaluations,
-        }
-      );
+      await consultationAPI.saveDiagnosisSelections(state.patientId, {
+        selected_diagnoses: selectedNames,
+        evaluations: evaluationsByName,
+      });
 
-      // Navigate to exams step
       dispatch(consultationActions.setCurrentStep('exams'));
       navigate('/exams');
     } catch (err) {
       console.error('Error saving diagnosis selections:', err);
-      setApiError(
-        err.message || 'Failed to save selections. Please try again.'
-      );
+      setApiError(err.message || 'Failed to save selections. Please try again.');
       window.scrollTo(0, 0);
     }
   };
 
-  // =========================================================================
-  // RENDER
-  // =========================================================================
-
-  const hasSelectedDiagnoses = selectedDiagnoses.length > 0;
+  const hasSelected = selectedIds.length > 0;
 
   return (
     <div className="bg-light min-vh-100 py-4">
-      <Container>
-        {/* Progress Section */}
+      <Container style={{ maxWidth: '900px' }}>
+        {/* Progress */}
         <div className="mb-4">
           <div className="d-flex justify-content-between align-items-center mb-2">
             <small className="text-muted fw-semibold">Step 7 of 10</small>
-            <small className="text-muted">70% Complete</small>
+            <small className="text-muted">70% complete</small>
           </div>
-          <ProgressBar now={70} style={{ height: '8px' }} className="mb-3" />
+          <ProgressBar now={70} style={{ height: '8px' }} />
         </div>
 
-        {/* Error Alert */}
+        {/* Error */}
         {apiError && (
           <Alert
             variant="danger"
             dismissible
             onClose={() => setApiError(null)}
-            className="mb-4"
+            className="mb-3"
           >
-            <Alert.Heading>Error</Alert.Heading>
-            <p className="mb-0">{apiError}</p>
+            <Alert.Heading className="h6 mb-2">Error</Alert.Heading>
+            <p className="mb-0 small">{apiError}</p>
           </Alert>
         )}
 
-        {/* Loading State */}
+        {/* Loading */}
         {isLoadingSuggestions ? (
           <Card className="border-0 shadow-sm">
             <Card.Body className="p-5 text-center">
               <Spinner animation="border" variant="primary" className="mb-3" />
-              <p className="text-muted">
-                Analyzing patient data and generating differential diagnosis suggestions...
+              <p className="text-muted mb-0">
+                Analyzing patient data and generating differential diagnoses…
               </p>
             </Card.Body>
           </Card>
         ) : (
-          <>
-            {/* Main Card */}
-            <Card className="border-0 shadow-sm mb-4">
-              <Card.Body className="p-4 p-md-5">
-                {/* Header */}
-                <div className="mb-5">
-                  <h1 className="display-6 fw-bold text-primary mb-2">
-                    🔬 AI Diagnostic Suggestions
-                  </h1>
-                  <p className="text-muted lead mb-0">
-                    Review and evaluate the AI-generated differential diagnoses
+          <Card className="border-0 shadow-sm">
+            <Card.Body className="p-4 p-md-5">
+              {/* Header */}
+              <div className="mb-4">
+                <h1 className="h3 fw-bold text-primary mb-1">
+                  AI Differential Diagnosis
+                </h1>
+                <p className="text-muted mb-0 small">
+                  Select diagnoses, expand each one to add ratings and comments, and
+                  optionally add your own diagnoses.
+                </p>
+              </div>
+
+              {/* AI summary */}
+              {aiSummary && (
+                <Card className="bg-light border-0 mb-4">
+                  <Card.Body className="p-3">
+                    <p className="small mb-1 fw-semibold text-muted">
+                      AI analysis summary
+                    </p>
+                    <p className="small mb-0 text-muted">{aiSummary}</p>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {/* Add manual diagnosis */}
+              <div className="mb-4">
+                <p className="small fw-semibold mb-2">Add manual diagnosis</p>
+                <InputGroup>
+                  <Form.Control
+                    placeholder="Type a custom diagnosis and click Add"
+                    value={manualText}
+                    onChange={(e) => setManualText(e.target.value)}
+                    size="sm"
+                  />
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    onClick={handleAddManualDiagnosis}
+                  >
+                    + Add
+                  </Button>
+                </InputGroup>
+              </div>
+
+              {/* Suggestions list */}
+              {diagnosisItems.length === 0 ? (
+                <Alert variant="info" className="border-0">
+                  <p className="small mb-0">
+                    No diagnosis suggestions available. Please ensure previous steps
+                    are completed.
                   </p>
-                </div>
-
-                {/* AI Summary */}
-                {aiSummary && (
-                  <Card className="bg-light border-0 mb-4">
-                    <Card.Body className="p-3">
-                      <p className="text-muted small mb-0">
-                        <strong>AI Analysis Summary:</strong>
-                      </p>
-                      <p className="text-muted mt-2 mb-0">{aiSummary}</p>
-                    </Card.Body>
-                  </Card>
-                )}
-
-                {/* Info Alert */}
-                <Alert
-                  variant="info"
-                  className="border-0 bg-info bg-opacity-10 mb-4"
-                >
-                  <div className="d-flex align-items-start">
-                    <span className="me-2" style={{ fontSize: '1.2rem' }}>
-                      ℹ️
-                    </span>
-                    <small>
-                      These diagnostic suggestions are based on AI analysis of your
-                      symptoms, demographics, lifestyle, and medical history. A
-                      healthcare professional will review your selections and
-                      confidence ratings.
-                    </small>
-                  </div>
                 </Alert>
+              ) : (
+                <div className="mb-4">
+                  <p className="small fw-semibold mb-2">
+                    Review each suggestion. Click the row to expand and rate.
+                  </p>
 
-                {/* Suggestions List */}
-                {suggestions.length === 0 ? (
-                  <Alert variant="info" className="border-0">
-                    <p className="mb-0">
-                      No diagnosis suggestions available. Please ensure all previous
-                      steps have been completed with accurate information.
-                    </p>
-                  </Alert>
-                ) : (
-                  <div className="mb-5">
-                    <p className="fw-semibold mb-3">
-                      Please review and rate these diagnosis suggestions:
-                    </p>
-                    <div className="space-y-3">
-                      {suggestions.map((diagnosis, idx) => (
-                        <Card
-                          key={idx}
-                          className={`border-2 transition ${
-                            isSelected(diagnosis.name)
-                              ? 'border-primary bg-primary bg-opacity-5'
-                              : 'border-light'
-                          }`}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <Card.Body className="p-3">
-                            <div className="d-flex gap-3">
-                              {/* Checkbox */}
-                              <Form.Check
-                                type="checkbox"
-                                checked={isSelected(diagnosis.name)}
-                                onChange={() => toggleDiagnosis(diagnosis.name)}
-                                className="mt-1"
-                              />
+                  {diagnosisItems.map((item) => {
+                    const isSelected = selectedIds.includes(item.id);
+                    const evalForItem = evaluations[item.id] || {};
+                    const average = getAverageScore(item.id);
+                    const complete = isEvaluationComplete(item.id);
 
-                              {/* Diagnosis Info */}
-                              <div className="flex-grow-1">
-                                <div className="d-flex justify-content-between align-items-start mb-2">
-                                  <div>
-                                    <h6 className="mb-1 fw-bold">
-                                      {diagnosis.name}
-                                    </h6>
-                                    {diagnosis.description && (
-                                      <p className="text-muted small mb-0">
-                                        {diagnosis.description}
-                                      </p>
-                                    )}
+                    return (
+                      <Card
+                        key={item.id}
+                        className={`mb-2 border ${
+                          isSelected ? 'border-primary' : 'border-light'
+                        }`}
+                      >
+                        <Card.Body className="py-2 px-3">
+                          <div className="d-flex align-items-start">
+                            {/* Checkbox */}
+                            <Form.Check
+                              type="checkbox"
+                              className="mt-1 me-3"
+                              checked={isSelected}
+                              onChange={() => toggleSelected(item.id)}
+                            />
+
+                            {/* Main content */}
+                            <div
+                              className="flex-grow-1"
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => toggleExpanded(item.id)}
+                            >
+                              <div className="d-flex justify-content-between align-items-start">
+                                <div>
+                                  <div className="d-flex align-items-center gap-2">
+                                    <span className="fw-semibold small">
+                                      {item.name}
+                                    </span>
+                                    <Badge
+                                      bg={
+                                        item.source === 'ai'
+                                          ? 'info'
+                                          : 'secondary'
+                                      }
+                                      pill
+                                    >
+                                      {item.source === 'ai' ? 'AI' : 'Manual'}
+                                    </Badge>
                                   </div>
+                                  {item.description && (
+                                    <p className="text-muted small mb-0 mt-1">
+                                      {item.description}
+                                    </p>
+                                  )}
                                 </div>
 
-                                {/* Expanded Details when Selected */}
-                                {isSelected(diagnosis.name) && (
-                                  <div className="mt-4 pt-3 border-top">
-                                    <div className="mb-4">
-                                      <p className="small fw-semibold mb-3">
-                                        ⭐ Rate this diagnosis suggestion:
-                                      </p>
-
-                                      {/* Accuracy Rating */}
-                                      <div className="mb-3">
-                                        <label className="small fw-semibold mb-2 d-block">
-                                          Accuracy (1-10)
-                                        </label>
-                                        <div className="d-flex gap-2">
-                                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
-                                            (num) => (
-                                              <Button
-                                                key={num}
-                                                size="sm"
-                                                variant={
-                                                  evaluations[diagnosis.name]
-                                                    ?.accuracy === num
-                                                    ? 'primary'
-                                                    : 'outline-secondary'
-                                                }
-                                                onClick={() =>
-                                                  setEvaluation(
-                                                    diagnosis.name,
-                                                    'accuracy',
-                                                    num
-                                                  )
-                                                }
-                                              >
-                                                {num}
-                                              </Button>
-                                            )
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Relevance Rating */}
-                                      <div className="mb-3">
-                                        <label className="small fw-semibold mb-2 d-block">
-                                          Relevance (1-10)
-                                        </label>
-                                        <div className="d-flex gap-2">
-                                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
-                                            (num) => (
-                                              <Button
-                                                key={num}
-                                                size="sm"
-                                                variant={
-                                                  evaluations[diagnosis.name]
-                                                    ?.relevance === num
-                                                    ? 'primary'
-                                                    : 'outline-secondary'
-                                                }
-                                                onClick={() =>
-                                                  setEvaluation(
-                                                    diagnosis.name,
-                                                    'relevance',
-                                                    num
-                                                  )
-                                                }
-                                              >
-                                                {num}
-                                              </Button>
-                                            )
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Usefulness Rating */}
-                                      <div className="mb-3">
-                                        <label className="small fw-semibold mb-2 d-block">
-                                          Usefulness (1-10)
-                                        </label>
-                                        <div className="d-flex gap-2">
-                                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
-                                            (num) => (
-                                              <Button
-                                                key={num}
-                                                size="sm"
-                                                variant={
-                                                  evaluations[diagnosis.name]
-                                                    ?.usefulness === num
-                                                    ? 'primary'
-                                                    : 'outline-secondary'
-                                                }
-                                                onClick={() =>
-                                                  setEvaluation(
-                                                    diagnosis.name,
-                                                    'usefulness',
-                                                    num
-                                                  )
-                                                }
-                                              >
-                                                {num}
-                                              </Button>
-                                            )
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Coherence Rating */}
-                                      <div className="mb-3">
-                                        <label className="small fw-semibold mb-2 d-block">
-                                          Coherence (1-10)
-                                        </label>
-                                        <div className="d-flex gap-2">
-                                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
-                                            (num) => (
-                                              <Button
-                                                key={num}
-                                                size="sm"
-                                                variant={
-                                                  evaluations[diagnosis.name]
-                                                    ?.coherence === num
-                                                    ? 'primary'
-                                                    : 'outline-secondary'
-                                                }
-                                                onClick={() =>
-                                                  setEvaluation(
-                                                    diagnosis.name,
-                                                    'coherence',
-                                                    num
-                                                  )
-                                                }
-                                              >
-                                                {num}
-                                              </Button>
-                                            )
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Comments */}
-                                      <div>
-                                        <label className="small fw-semibold mb-2 d-block">
-                                          Comments (Optional)
-                                        </label>
-                                        <Form.Control
-                                          as="textarea"
-                                          rows={2}
-                                          placeholder="Add any additional comments about this diagnosis..."
-                                          value={
-                                            evaluations[diagnosis.name]
-                                              ?.comments || ''
-                                          }
-                                          onChange={(e) =>
-                                            setComment(diagnosis.name, e.target.value)
-                                          }
-                                          className="small"
-                                        />
-                                      </div>
-
-                                      {/* Score Summary */}
-                                      <div className="mt-3 pt-3 border-top">
-                                        <small className="text-muted">
-                                          Average Score:{' '}
-                                          <strong>
-                                            {getEvaluationScore(diagnosis.name)}/10
-                                          </strong>
-                                        </small>
-                                      </div>
+                                <div className="text-end">
+                                  {average > 0 && (
+                                    <div className="small text-muted">
+                                      Avg: <strong>{average}/10</strong>
                                     </div>
-                                  </div>
-                                )}
+                                  )}
+                                  {isSelected && (
+                                    <Badge
+                                      bg={complete ? 'success' : 'warning'}
+                                      className="mt-1"
+                                    >
+                                      {complete ? 'Complete' : 'Pending'}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </Card.Body>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                          </div>
 
-                {/* Selected Summary */}
-                {hasSelectedDiagnoses && (
-                  <Card className="bg-light border-0 mb-4">
-                    <Card.Body className="p-3">
-                      <p className="fw-semibold mb-2">
-                        Selected Diagnoses ({selectedDiagnoses.length})
-                      </p>
-                      <ListGroup>
-                        {selectedDiagnoses.map((diagnosisName) => {
-                          const isComplete = isEvaluationComplete(diagnosisName);
-                          const score = getEvaluationScore(diagnosisName);
-                          return (
-                            <ListGroup.Item
-                              key={diagnosisName}
-                              className="d-flex justify-content-between align-items-center"
-                            >
-                              <div>
-                                <p className="mb-1">{diagnosisName}</p>
-                                <small className="text-muted">
-                                  Score: {score}/10
-                                </small>
+                          {/* Expandable review area */}
+                          <Collapse in={item.expanded}>
+                            <div className="mt-3 border-top pt-3">
+                              <p className="small fw-semibold mb-2">
+                                Rate this diagnosis (1–10)
+                              </p>
+
+                              {/* Ratings grid */}
+                              <div className="row g-2 mb-3">
+                                {['accuracy', 'relevance', 'usefulness', 'coherence'].map(
+                                  (field) => (
+                                    <div className="col-12 col-md-6" key={field}>
+                                      <Form.Label className="small mb-1 text-muted text-capitalize">
+                                        {field}
+                                      </Form.Label>
+                                      <Form.Select
+                                        size="sm"
+                                        value={evalForItem[field] || ''}
+                                        onChange={(e) =>
+                                          setRating(item.id, field, e.target.value)
+                                        }
+                                      >
+                                        <option value="">Select</option>
+                                        {Array.from({ length: 10 }).map((_, i) => (
+                                          <option key={i + 1} value={i + 1}>
+                                            {i + 1}
+                                          </option>
+                                        ))}
+                                      </Form.Select>
+                                    </div>
+                                  )
+                                )}
                               </div>
-                              {isComplete ? (
-                                <Badge bg="success">✓ Complete</Badge>
-                              ) : (
-                                <Badge bg="warning">⚠ Incomplete</Badge>
-                              )}
-                            </ListGroup.Item>
-                          );
-                        })}
-                      </ListGroup>
-                    </Card.Body>
-                  </Card>
-                )}
 
-                {/* Guidance Alert */}
-                <Alert variant="info" className="border-0 bg-info bg-opacity-10 mb-4">
-                  <div className="d-flex align-items-start">
-                    <span className="me-2" style={{ fontSize: '1.2rem' }}>
-                      💡
-                    </span>
-                    <div className="small">
-                      <p className="mb-2 fw-semibold">How to rate each diagnosis:</p>
-                      <ul className="mb-0 ps-3">
-                        <li>
-                          <strong>Accuracy:</strong> How accurate is this diagnosis
-                          based on your symptoms?
-                        </li>
-                        <li>
-                          <strong>Relevance:</strong> How relevant is this diagnosis to
-                          your condition?
-                        </li>
-                        <li>
-                          <strong>Usefulness:</strong> How useful would this diagnosis
-                          be for treatment?
-                        </li>
-                        <li>
-                          <strong>Coherence:</strong> How logically coherent is this
-                          diagnosis with your data?
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-                </Alert>
-
-                {/* Action Buttons */}
-                <div className="d-flex justify-content-between align-items-center pt-4 border-top">
-                  <Button
-                    variant="outline-secondary"
-                    onClick={() => navigate(-1)}
-                    size="lg"
-                    disabled={isSubmitting}
-                  >
-                    ← Back
-                  </Button>
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    size="lg"
-                    disabled={
-                      isSubmitting ||
-                      !hasSelectedDiagnoses ||
-                      selectedDiagnoses.some(
-                        (name) => !isEvaluationComplete(name)
-                      )
-                    }
-                    onClick={handleSubmit(onSubmit)}
-                    className="d-flex align-items-center gap-2"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Spinner animation="border" size="sm" />
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Next: Recommended Exams</span>
-                        <span>→</span>
-                      </>
-                    )}
-                  </Button>
+                              {/* Comments */}
+                              <Form.Group className="mb-1">
+                                <Form.Label className="small mb-1 text-muted">
+                                  Comments (optional)
+                                </Form.Label>
+                                <Form.Control
+                                  as="textarea"
+                                  rows={2}
+                                  size="sm"
+                                  placeholder="Rationale..."
+                                  value={evalForItem.comments || ''}
+                                  onChange={(e) =>
+                                    setComment(item.id, e.target.value)
+                                  }
+                                />
+                              </Form.Group>
+                            </div>
+                          </Collapse>
+                        </Card.Body>
+                      </Card>
+                    );
+                  })}
                 </div>
-              </Card.Body>
-            </Card>
-          </>
+              )}
+
+              {/* Selected summary */}
+              {hasSelected && (
+                <Card className="bg-light border-0 mb-4">
+                  <Card.Body className="p-3">
+                    <p className="small fw-semibold mb-2">
+                      Selected diagnoses ({selectedIds.length})
+                    </p>
+                    <ListGroup variant="flush">
+                      {selectedIds.map((id) => {
+                        const item = diagnosisItems.find((x) => x.id === id);
+                        if (!item) return null;
+                        const score = getAverageScore(id);
+                        const complete = isEvaluationComplete(id);
+                        return (
+                          <ListGroup.Item
+                            key={id}
+                            className="d-flex justify-content-between align-items-center py-2"
+                          >
+                            <div>
+                              <p className="mb-1 small fw-semibold">{item.name}</p>
+                              <small className="text-muted">
+                                Score: {score}/10
+                              </small>
+                            </div>
+                            <Badge bg={complete ? 'success' : 'warning'}>
+                              {complete ? 'Complete' : 'Pending'}
+                            </Badge>
+                          </ListGroup.Item>
+                        );
+                      })}
+                    </ListGroup>
+                  </Card.Body>
+                </Card>
+              )}
+
+              {/* Info */}
+              <Alert
+                variant="info"
+                className="border-0 bg-info bg-opacity-10 mb-4 small"
+              >
+                <p className="fw-semibold mb-1">How to rate:</p>
+                <ul className="mb-0 ps-3">
+                  <li>
+                    <strong>Accuracy:</strong> How well it matches the symptoms.
+                  </li>
+                  <li>
+                    <strong>Relevance:</strong> How relevant it is to the case.
+                  </li>
+                  <li>
+                    <strong>Usefulness:</strong> How helpful it is for management.
+                  </li>
+                  <li>
+                    <strong>Coherence:</strong> How logically it fits available data.
+                  </li>
+                </ul>
+              </Alert>
+
+              {/* Actions */}
+              <div className="d-flex justify-content-between align-items-center pt-3 border-top">
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => navigate(-1)}
+                  size="sm"
+                  disabled={isSubmitting}
+                >
+                  ← Back
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={
+                    isSubmitting ||
+                    !hasSelected ||
+                    selectedIds.some((id) => !isEvaluationComplete(id))
+                  }
+                  onClick={handleSubmit(onSubmit)}
+                  className="d-flex align-items-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Spinner animation="border" size="sm" />
+                      <span>Processing…</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Next: Exams</span>
+                      <span>→</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </Card.Body>
+          </Card>
         )}
 
-        {/* Footer */}
-        <div className="text-center mt-4">
+        <div className="text-center mt-3">
           <small className="text-muted">
-            Your ratings help improve AI diagnostic accuracy for future patients
+            Your feedback helps improve future AI diagnostic suggestions.
           </small>
         </div>
       </Container>
